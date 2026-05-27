@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Squash Liga — ELO Rangsor</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d0f14; --bg2: #151820; --bg3: #1c2030;
+  --border: rgba(255,255,255,0.08);
+  --accent: #00e5a0; --accent2: #4a9eff; --accent3: #ff6b6b;
+  --text: #e8eaf0; --muted: #8892a4;
+  --gold: #ffc947; --silver: #c0cfe0; --platinum: #a78bfa; --elite: #ff6b6b;
+}
+body { background: var(--bg); color: var(--text); font-family: 'Rajdhani', sans-serif; font-size: 13px; min-height: 100vh; }
+.app { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+h1 { font-size: 24px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+.subtitle { color: var(--muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 20px; }
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; flex-wrap: wrap; }
+.tab { padding: 7px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); background: none; border: 1px solid transparent; transition: all 0.2s; }
+.tab:hover { color: var(--text); background: var(--bg3); }
+.tab.active { color: #0d0f14; background: var(--accent); border-color: var(--accent); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+@media(max-width:600px) { .grid4 { grid-template-columns: repeat(2,1fr); } .grid2 { grid-template-columns: 1fr; } }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.metric-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 4px; }
+.metric-val { font-size: 26px; font-weight: 700; }
+.metric-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+.player-bubble-area { position: relative; width: 100%; height: 280px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.bubble { position: absolute; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.5); transform: translate(-50%,-50%); }
+.bubble:hover { transform: translate(-50%,-50%) scale(1.1); z-index: 10; }
+.bubble.selected { box-shadow: 0 0 0 3px #fff, 0 0 24px rgba(0,229,160,0.4); z-index: 20; }
+.bubble-name { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; text-align: center; }
+.bubble-elo { font-size: 10px; opacity: 0.8; }
+.ranking-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ranking-table th { text-align: left; padding: 7px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); border-bottom: 1px solid var(--border); }
+.ranking-table td { padding: 8px 8px; border-bottom: 1px solid var(--border); }
+.ranking-table tr:hover td { background: var(--bg3); cursor: pointer; }
+.ranking-table tr.selected-row td { background: rgba(0,229,160,0.07); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+.badge-silver { background: rgba(192,207,224,0.15); color: var(--silver); border: 1px solid rgba(192,207,224,0.3); }
+.badge-gold { background: rgba(255,201,71,0.15); color: var(--gold); border: 1px solid rgba(255,201,71,0.3); }
+.badge-platinum { background: rgba(167,139,250,0.15); color: var(--platinum); border: 1px solid rgba(167,139,250,0.3); }
+.badge-elite { background: rgba(255,107,107,0.15); color: var(--elite); border: 1px solid rgba(255,107,107,0.3); }
+.win-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 1px; }
+.dot-w { background: var(--accent); }
+.dot-l { background: var(--accent3); }
+.history-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; gap: 8px; flex-wrap: wrap; }
+.history-item:last-child { border-bottom: none; }
+.elo-badge { font-size: 11px; font-weight: 700; }
+.elo-up { color: var(--accent); }
+.elo-down { color: var(--accent3); }
+.panel { display: none; }
+.panel.active { display: block; }
+.player-detail { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.player-detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.avatar { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; flex-shrink: 0; }
+.player-name-big { font-size: 20px; font-weight: 700; }
+.wins-chart-wrap { position: relative; width: 100%; height: 170px; }
+input, select, button { font-family: 'Rajdhani', sans-serif; font-size: 13px; }
+.form-input { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); width: 100%; }
+.form-input:focus { outline: none; border-color: var(--accent); }
+select.form-input option { background: #1c2030; }
+.btn-primary { background: var(--accent); color: #0d0f14; border: none; border-radius: 6px; padding: 9px 18px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px; font-size: 12px; text-transform: uppercase; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-primary.full { width: 100%; margin-top: 10px; }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; font-weight: 600; cursor: pointer; font-size: 12px; }
+.btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
+.btn-danger { background: rgba(255,107,107,0.12); color: var(--accent3); border: 1px solid rgba(255,107,107,0.3); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 11px; }
+.btn-danger:hover { background: rgba(255,107,107,0.22); }
+/* Score entry */
+.score-entry { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 12px; }
+.score-entry-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+.game-row { display: grid; grid-template-columns: 28px 1fr 18px 1fr 28px; align-items: center; gap: 6px; margin-bottom: 7px; }
+.game-label { font-size: 11px; color: var(--muted); font-weight: 600; text-align: center; }
+.game-sep { text-align: center; color: var(--muted); font-size: 13px; }
+.score-input { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; padding: 6px 4px; color: var(--text); width: 100%; text-align: center; font-size: 14px; font-weight: 700; }
+.score-input:focus { outline: none; border-color: var(--accent); }
+.remove-game-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 2px; line-height: 1; }
+.remove-game-btn:hover { color: var(--accent3); }
+.add-game-btn { background: none; border: 1px dashed var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: 11px; padding: 6px; width: 100%; margin-top: 4px; letter-spacing: 0.5px; }
+.add-game-btn:hover { border-color: var(--accent); color: var(--accent); }
+.score-preview { font-size: 13px; color: var(--muted); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.score-badge { font-size: 16px; font-weight: 700; }
+.score-display { font-family: 'Courier New', monospace; font-size: 11px; color: var(--muted); }
+.score-display .sw { color: var(--accent); }
+.score-display .sl { color: var(--accent3); }
+/* Import/Export */
+.io-area { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; color: var(--muted); width: 100%; min-height: 80px; resize: vertical; margin-top: 6px; }
+.io-area:focus { outline: none; border-color: var(--accent2); }
+.msg-ok { color: var(--accent); font-size: 12px; margin-top: 6px; }
+.msg-err { color: var(--accent3); font-size: 12px; margin-top: 6px; }
+/* Password overlay */
+#pw-overlay { position: fixed; inset: 0; background: rgba(13,15,20,0.97); display: flex; align-items: center; justify-content: center; z-index: 999; }
+.pw-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 32px; max-width: 360px; width: 90%; text-align: center; }
+.pw-title { font-size: 18px; font-weight: 700; color: var(--accent); margin-bottom: 6px; letter-spacing: 1px; }
+.pw-sub { color: var(--muted); font-size: 12px; margin-bottom: 20px; }
+.pw-input { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--text); width: 100%; font-size: 14px; text-align: center; letter-spacing: 2px; margin-bottom: 10px; }
+.pw-input:focus { outline: none; border-color: var(--accent); }
+.pw-err { color: var(--accent3); font-size: 12px; margin-top: 6px; min-height: 18px; }
+.pw-hint { color: var(--muted); font-size: 11px; margin-top: 12px; }
+/* Admin lock indicator */
+.admin-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 12px; }
+.admin-on { background: rgba(0,229,160,0.12); color: var(--accent); border: 1px solid rgba(0,229,160,0.3); }
+.admin-off { background: rgba(255,107,107,0.12); color: var(--accent3); border: 1px solid rgba(255,107,107,0.25); }
+.readonly-notice { background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.2); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--accent3); margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<!-- PASSWORD OVERLAY -->
+<div id="pw-overlay" style="display:none">
+  <div class="pw-box">
+    <div class="pw-title">⬡ SQUASH LIGA</div>
+    <div class="pw-sub">Admin jelszó szükséges a szerkesztéshez</div>
+    <input class="pw-input" type="password" id="pw-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()" />
+    <button class="btn-primary" style="width:100%" onclick="checkPw()">Belépés</button>
+    <div class="pw-err" id="pw-err"></div>
+    <div class="pw-hint">Csak megtekintéshez nyomd meg az ESC-et vagy kattints a háttérre</div>
+  </div>
+</div>
+
+<div class="app">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+    <h1>⬡ SQUASH LIGA</h1>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="admin-indicator" class="admin-badge admin-off">🔒 Néző mód</span>
+      <button class="btn-secondary" style="font-size:11px;padding:5px 12px" onclick="toggleAdmin()">Admin</button>
+    </div>
+  </div>
+  <div class="subtitle">ELO Rangsor · Bajnokság Kimutatás</div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+    <div class="tab" onclick="switchTab('players')">Játékosok</div>
+    <div class="tab" onclick="switchTab('matches')">Mérkőzés rögzítés</div>
+    <div class="tab" onclick="switchTab('history')">Előzmények</div>
+    <div class="tab" onclick="switchTab('settings')">Adatok / Export</div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="panel-dashboard" class="panel active">
+    <div id="summary-grid" class="grid4"></div>
+    <div class="card">
+      <div class="section-title">ELO Buborék Térkép — kattints egy játékosra</div>
+      <div class="player-bubble-area" id="bubble-area"></div>
+    </div>
+    <div id="player-detail-area"></div>
+    <div class="grid2">
+      <div class="card">
+        <div class="section-title">ELO Rangsor</div>
+        <table class="ranking-table" id="elo-rank-table">
+          <thead><tr><th>#</th><th>Játékos</th><th>ELO</th><th>Tier</th><th>W/L</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="section-title">Aktivitás Rangsor</div>
+        <table class="ranking-table" id="activity-rank-table">
+          <thead><tr><th>#</th><th>Játékos</th><th>Játszott</th><th>Győz.</th><th>Ráta</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLAYERS -->
+  <div id="panel-players" class="panel">
+    <div id="readonly-players"></div>
+    <div id="admin-players-form" style="display:none">
+      <div class="card">
+        <div class="section-title">Új játékos hozzáadása</div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
+          <input class="form-input" id="new-player-name" placeholder="Játékos neve" onkeydown="if(event.key==='Enter')addPlayer()" />
+          <button class="btn-primary" onclick="addPlayer()">Hozzáad</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title">Regisztrált játékosok</div>
+      <div id="player-list"></div>
+    </div>
+  </div>
+
+  <!-- MATCHES -->
+  <div id="panel-matches" class="panel">
+    <div id="readonly-matches"></div>
+    <div id="admin-matches-form" style="display:none">
+      <div class="card">
+        <div class="section-title">Mérkőzés rögzítése</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div class="metric-label" style="margin-bottom:4px">Győztes</div>
+            <select class="form-input" id="match-winner" onchange="updateScoreHeader()"></select>
+          </div>
+          <div>
+            <div class="metric-label" style="margin-bottom:4px">Vesztes</div>
+            <select class="form-input" id="match-loser" onchange="updateScoreHeader()"></select>
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <div class="metric-label" style="margin-bottom:4px">Dátum</div>
+          <input type="date" class="form-input" id="match-date" />
+        </div>
+        <div class="score-entry">
+          <div class="score-entry-title">Végeredmény — Gamek pontszámai</div>
+          <div style="display:grid;grid-template-columns:28px 1fr 18px 1fr 28px;gap:6px;margin-bottom:8px">
+            <span class="game-label" style="font-size:9px">GAME</span>
+            <span class="game-label" id="header-winner" style="color:var(--accent);font-size:10px;text-align:center">GYŐZTES</span>
+            <span></span>
+            <span class="game-label" id="header-loser" style="color:var(--accent3);font-size:10px;text-align:center">VESZTES</span>
+            <span></span>
+          </div>
+          <div id="games-container"></div>
+          <button class="add-game-btn" onclick="addGame()">+ Game hozzáadása</button>
+          <div class="score-preview">
+            <span style="font-size:11px;color:var(--muted)">Gamek száma: <strong id="games-count" style="color:var(--text)">0</strong></span>
+            <span class="score-badge"><span id="preview-w" style="color:var(--accent)">0</span> – <span id="preview-l" style="color:var(--accent3)">0</span></span>
+          </div>
+        </div>
+        <button class="btn-primary full" onclick="recordMatch()">Mérkőzés rögzítése</button>
+        <div id="match-msg" style="margin-top:8px;font-size:12px;color:var(--accent)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="panel-history" class="panel">
+    <div class="card">
+      <div class="section-title">Mérkőzés előzmények</div>
+      <div id="history-list"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS / EXPORT -->
+  <div id="panel-settings" class="panel">
+    <div class="card">
+      <div class="section-title">Adatok exportálása</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:10px">Mentsd el az alábbi JSON-t — ezt importálhatod vissza bármikor, vagy megoszhatod a saját hostolt verziódban.</p>
+      <button class="btn-secondary" onclick="exportData()" style="margin-bottom:8px">JSON másolása vágólapra</button>
+      <button class="btn-secondary" onclick="downloadData()" style="margin-bottom:8px;margin-left:6px">Letöltés .json fájlként</button>
+      <textarea class="io-area" id="export-area" readonly></textarea>
+    </div>
+    <div class="card" id="import-card" style="display:none">
+      <div class="section-title">Adatok importálása</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:10px">Illeszd be az előzőleg exportált JSON-t, majd kattints az Importálás gombra.</p>
+      <textarea class="io-area" id="import-area" placeholder='{"players":[...],"matches":[...]}'></textarea>
+      <button class="btn-primary full" onclick="importData()" style="margin-top:8px">Importálás</button>
+      <div id="import-msg"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Admin jelszó beállítása</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:10px">Add meg az admin jelszót — ezt kell beírni a szerkesztési funkciók eléréséhez. A jelszó a böngésző localStorage-ban tárolódik.</p>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
+        <input class="form-input" type="password" id="new-pw" placeholder="Új jelszó" />
+        <button class="btn-primary" onclick="savePw()">Mentés</button>
+      </div>
+      <div id="pw-save-msg" style="margin-top:6px;font-size:12px"></div>
+    </div>
+    <div class="card" style="border-color:rgba(255,107,107,0.2)">
+      <div class="section-title" style="color:var(--accent3)">Veszélyes zóna</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:10px">Minden adat törlése — ez nem visszavonható!</p>
+      <button class="btn-danger" onclick="clearAll()">Összes adat törlése</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+const COLORS = ['#00e5a0','#4a9eff','#ff6b6b','#ffc947','#a78bfa','#f97316','#06b6d4','#ec4899','#84cc16','#f43f5e'];
+const ADMIN_PW_KEY = 'squash_admin_pw';
+const DATA_KEY = 'squash_league_data';
+
+let state = { players: [], matches: [] };
+let games = [];
+let selectedPlayer = null;
+let detailChart = null;
+let isAdmin = false;
+
+// ===================== STORAGE =====================
+function save() {
+  try { localStorage.setItem(DATA_KEY, JSON.stringify(state)); } catch(e) {}
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(DATA_KEY);
+    if (raw) { state = JSON.parse(raw); return true; }
+  } catch(e) {}
+  return false;
+}
+
+// ===================== ADMIN / PASSWORD =====================
+function getStoredPw() { return localStorage.getItem(ADMIN_PW_KEY) || 'squash2024'; }
+function savePw() {
+  const v = document.getElementById('new-pw').value.trim();
+  if (!v) return;
+  localStorage.setItem(ADMIN_PW_KEY, v);
+  document.getElementById('pw-save-msg').className = 'msg-ok';
+  document.getElementById('pw-save-msg').textContent = '✓ Jelszó elmentve';
+  document.getElementById('new-pw').value = '';
+  setTimeout(() => { document.getElementById('pw-save-msg').textContent = ''; }, 2500);
+}
+function toggleAdmin() {
+  if (isAdmin) { isAdmin = false; updateAdminUI(); return; }
+  document.getElementById('pw-overlay').style.display = 'flex';
+  document.getElementById('pw-input').value = '';
+  document.getElementById('pw-err').textContent = '';
+  setTimeout(() => document.getElementById('pw-input').focus(), 100);
+}
+function checkPw() {
+  const v = document.getElementById('pw-input').value;
+  if (v === getStoredPw()) {
+    isAdmin = true;
+    document.getElementById('pw-overlay').style.display = 'none';
+    updateAdminUI();
+  } else {
+    document.getElementById('pw-err').textContent = 'Helytelen jelszó';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+}
+document.getElementById('pw-overlay').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('pw-overlay').style.display = 'none'; });
+
+function updateAdminUI() {
+  const ind = document.getElementById('admin-indicator');
+  if (isAdmin) {
+    ind.className = 'admin-badge admin-on'; ind.textContent = '✓ Admin mód';
+  } else {
+    ind.className = 'admin-badge admin-off'; ind.textContent = '🔒 Néző mód';
+  }
+  document.getElementById('admin-players-form').style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('admin-matches-form').style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('import-card').style.display = isAdmin ? 'block' : 'none';
+
+  const ro1 = document.getElementById('readonly-players');
+  const ro2 = document.getElementById('readonly-matches');
+  const notice = '<div class="readonly-notice">🔒 Csak megtekintési mód — az adatok módosításához jelentkezz be adminként (jobb felső sarok)</div>';
+  ro1.innerHTML = isAdmin ? '' : notice;
+  ro2.innerHTML = isAdmin ? '' : notice;
+
+  const delbts = document.querySelectorAll('.btn-danger-player');
+  delbts.forEach(b => b.style.display = isAdmin ? '' : 'none');
+  render();
+}
+
+// ===================== ELO LOGIC =====================
+function nextId() { return state.players.length ? Math.max(...state.players.map(p => p.id)) + 1 : 1; }
+
+function addPlayer() {
+  if (!isAdmin) return;
+  const name = document.getElementById('new-player-name').value.trim();
+  if (!name) return;
+  if (state.players.find(p => p.name.toLowerCase() === name.toLowerCase())) { alert('Már létezik!'); return; }
+  state.players.push({ id: nextId(), name, elo: 1200, color: COLORS[state.players.length % COLORS.length] });
+  document.getElementById('new-player-name').value = '';
+  save(); render();
+}
+
+function removePlayer(id) {
+  if (!isAdmin) return;
+  if (!confirm('Biztosan törlöd a játékost és összes mérkőzését?')) return;
+  state.players = state.players.filter(p => p.id !== id);
+  state.matches = state.matches.filter(m => m.winnerId !== id && m.loserId !== id);
+  recalcElo(); save(); render();
+}
+
+function addMatchRaw(wId, lId, date, gameScores) {
+  if (wId === lId) return;
+  const K = 32;
+  const winner = state.players.find(p => p.id === wId);
+  const loser = state.players.find(p => p.id === lId);
+  if (!winner || !loser) return;
+  const expW = 1 / (1 + Math.pow(10, (loser.elo - winner.elo) / 400));
+  const wOld = winner.elo, lOld = loser.elo;
+  winner.elo = Math.round(winner.elo + K * (1 - expW));
+  loser.elo = Math.round(loser.elo + K * (0 - expW + 1 - 1));
+  const wEloChange = winner.elo - wOld;
+  const lEloChange = loser.elo - lOld;
+  const wGames = gameScores ? gameScores.filter(g => g[0] > g[1]).length : null;
+  const lGames = gameScores ? gameScores.filter(g => g[1] > g[0]).length : null;
+  const totalPtsW = gameScores ? gameScores.reduce((s, g) => s + g[0], 0) : null;
+  const totalPtsL = gameScores ? gameScores.reduce((s, g) => s + g[1], 0) : null;
+  state.matches.push({ id: Date.now() + Math.random(), winnerId: wId, loserId: lId, date, wEloChange, lEloChange, gameScores: gameScores || null, wGames, lGames, totalPtsW, totalPtsL });
+}
+
+function recalcElo() {
+  state.players.forEach(p => p.elo = 1200);
+  const ms = [...state.matches]; state.matches = [];
+  ms.forEach(m => addMatchRaw(m.winnerId, m.loserId, m.date, m.gameScores));
+}
+
+function playerStats(pid) {
+  const myMatches = state.matches.filter(m => m.winnerId === pid || m.loserId === pid);
+  const wins = myMatches.filter(m => m.winnerId === pid).length;
+  const losses = myMatches.filter(m => m.loserId === pid).length;
+  const total = wins + losses;
+  const rate = total ? Math.round(wins / total * 100) : 0;
+  const gamesWon = myMatches.reduce((s, m) => { if (m.wGames === null) return s; return s + (m.winnerId === pid ? m.wGames : m.lGames); }, 0);
+  const gamesLost = myMatches.reduce((s, m) => { if (m.wGames === null) return s; return s + (m.winnerId === pid ? m.lGames : m.wGames); }, 0);
+  const ptsW = myMatches.reduce((s, m) => { if (m.totalPtsW === null) return s; return s + (m.winnerId === pid ? m.totalPtsW : m.totalPtsL); }, 0);
+  const ptsL = myMatches.reduce((s, m) => { if (m.totalPtsW === null) return s; return s + (m.winnerId === pid ? m.totalPtsL : m.totalPtsW); }, 0);
+  return { wins, losses, total, rate, gamesWon, gamesLost, ptsW, ptsL };
+}
+
+function winTier(wins) {
+  if (wins >= 15) return { label: 'ELIT', cls: 'badge-elite' };
+  if (wins >= 10) return { label: 'PLATINUM', cls: 'badge-platinum' };
+  if (wins >= 5) return { label: 'GOLD', cls: 'badge-gold' };
+  return { label: 'SILVER', cls: 'badge-silver' };
+}
+function getInitials(name) { return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase(); }
+
+// ===================== GAME SCORE UI =====================
+function initGames() {
+  games = [{ w: '', l: '' }];
+  renderGames();
+}
+function addGame() {
+  if (games.length >= 5) return;
+  games.push({ w: '', l: '' });
+  renderGames();
+}
+function removeGame(i) {
+  if (games.length <= 1) return;
+  games.splice(i, 1);
+  renderGames();
+}
+function updateGame(i, side, val) {
+  games[i][side] = val;
+  updateScorePreview();
+}
+function renderGames() {
+  const c = document.getElementById('games-container');
+  if (!c) return;
+  c.innerHTML = games.map((g, i) => `
+    <div class="game-row">
+      <span class="game-label">${i + 1}</span>
+      <input class="score-input" type="number" min="0" max="30" value="${g.w}" placeholder="—" oninput="updateGame(${i},'w',this.value)" />
+      <span class="game-sep">:</span>
+      <input class="score-input" type="number" min="0" max="30" value="${g.l}" placeholder="—" oninput="updateGame(${i},'l',this.value)" />
+      <button class="remove-game-btn" onclick="removeGame(${i})" title="Törlés">×</button>
+    </div>`).join('');
+  updateScorePreview();
+}
+function updateScorePreview() {
+  let wg = 0, lg = 0;
+  games.forEach(g => { const wv = parseInt(g.w) || 0, lv = parseInt(g.l) || 0; if (wv > lv) wg++; else if (lv > wv) lg++; });
+  const gc = document.getElementById('games-count');
+  const pw = document.getElementById('preview-w');
+  const pl = document.getElementById('preview-l');
+  if (gc) gc.textContent = games.length;
+  if (pw) pw.textContent = wg;
+  if (pl) pl.textContent = lg;
+}
+function updateScoreHeader() {
+  const wSel = document.getElementById('match-winner');
+  const lSel = document.getElementById('match-loser');
+  if (!wSel || !lSel) return;
+  const w = state.players.find(p => p.id === parseInt(wSel.value));
+  const l = state.players.find(p => p.id === parseInt(lSel.value));
+  const hw = document.getElementById('header-winner');
+  const hl = document.getElementById('header-loser');
+  if (hw && w) hw.textContent = w.name.split(' ')[0].toUpperCase();
+  if (hl && l) hl.textContent = l.name.split(' ')[0].toUpperCase();
+}
+function getGameScores() {
+  const filled = games.filter(g => g.w !== '' && g.l !== '');
+  if (!filled.length) return null;
+  return filled.map(g => [parseInt(g.w) || 0, parseInt(g.l) || 0]);
+}
+
+function recordMatch() {
+  if (!isAdmin) return;
+  const wId = parseInt(document.getElementById('match-winner').value);
+  const lId = parseInt(document.getElementById('match-loser').value);
+  const date = document.getElementById('match-date').value || new Date().toISOString().split('T')[0];
+  const msg = document.getElementById('match-msg');
+  if (wId === lId) { msg.textContent = 'A győztes és vesztes nem lehet azonos!'; msg.className='msg-err'; return; }
+  const gameScores = getGameScores();
+  const winner = state.players.find(p => p.id === wId);
+  const loser = state.players.find(p => p.id === lId);
+  addMatchRaw(wId, lId, date, gameScores);
+  const gs = gameScores ? gameScores.filter(g => g[0] > g[1]).length + '–' + gameScores.filter(g => g[1] > g[0]).length : '';
+  msg.className = 'msg-ok';
+  msg.textContent = `✓ ${winner.name} nyert ${loser.name} ellen${gs ? ' (' + gs + ')' : ''}`;
+  setTimeout(() => { msg.textContent = ''; }, 3000);
+  initGames(); save(); render();
+}
+
+function formatScore(m) {
+  if (!m.gameScores || !m.gameScores.length) return '';
+  const sets = m.gameScores.map(g => `<span class="sw">${g[0]}</span>:<span class="sl">${g[1]}</span>`).join(' ');
+  return `<span class="score-display">${sets}</span>`;
+}
+
+// ===================== PLAYER SELECT =====================
+function selectPlayer(pid) {
+  selectedPlayer = selectedPlayer === pid ? null : pid;
+  renderBubbles(); renderPlayerDetail(); renderEloTable(); renderActivityTable();
+}
+
+// ===================== RENDER =====================
+function renderSummary() {
+  const totalMatches = state.matches.length;
+  const topPlayer = [...state.players].sort((a, b) => b.elo - a.elo)[0];
+  const allStats = state.players.map(p => ({ p, s: playerStats(p.id) }));
+  const bestRate = allStats.length ? allStats.reduce((b, x) => x.s.rate > b.s.rate ? x : b, allStats[0]) : null;
+  const totalGames = state.matches.reduce((s, m) => s + (m.gameScores ? m.gameScores.length : 0), 0);
+  document.getElementById('summary-grid').innerHTML = `
+    <div class="card"><div class="metric-label">Játékosok</div><div class="metric-val" style="color:var(--accent2)">${state.players.length}</div><div class="metric-sub">regisztrált</div></div>
+    <div class="card"><div class="metric-label">Mérkőzések</div><div class="metric-val" style="color:var(--accent)">${totalMatches}</div><div class="metric-sub">${totalGames} game összesen</div></div>
+    <div class="card"><div class="metric-label">ELO Vezető</div><div class="metric-val" style="color:${topPlayer?.color || 'var(--gold)'};font-size:18px">${topPlayer?.name.split(' ')[0] || '—'}</div><div class="metric-sub">${topPlayer?.elo || ''} ELO</div></div>
+    <div class="card"><div class="metric-label">Legjobb arány</div><div class="metric-val" style="color:var(--gold);font-size:18px">${bestRate?.p?.name.split(' ')[0] || '—'}</div><div class="metric-sub">${bestRate?.s?.rate || 0}% győzelmi ráta</div></div>`;
+}
+
+function renderBubbles() {
+  const area = document.getElementById('bubble-area');
+  area.innerHTML = '';
+  if (!state.players.length) { area.innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center;font-size:12px">Nincs regisztrált játékos</div>'; return; }
+  const sorted = [...state.players].sort((a, b) => b.elo - a.elo);
+  const maxElo = Math.max(...sorted.map(p => p.elo)), minElo = Math.min(...sorted.map(p => p.elo)), range = maxElo - minElo || 1;
+  const n = sorted.length, cols = Math.min(n, 5), rows = Math.ceil(n / cols);
+  sorted.forEach((p, i) => {
+    const norm = (p.elo - minElo) / range, size = 44 + norm * 56;
+    const col = i % cols, row = Math.floor(i / cols);
+    const cx = 10 + col * (80 / cols) + 40 / cols;
+    const cy = 12 + row * (76 / rows) + 38 / rows;
+    const jx = (Math.sin(i * 137) * 5), jy = (Math.cos(i * 137) * 4);
+    const div = document.createElement('div');
+    div.className = 'bubble' + (selectedPlayer === p.id ? ' selected' : '');
+    div.style.cssText = `left:${Math.max(6,Math.min(92,cx+jx))}%;top:${Math.max(8,Math.min(88,cy+jy))}%;width:${size}px;height:${size}px;background:${p.color}20;border:2px solid ${p.color};color:${p.color};`;
+    div.innerHTML = `<span class="bubble-name" style="font-size:${size > 70 ? 12 : 10}px">${p.name.split(' ')[0]}</span><span class="bubble-elo" style="font-size:${size > 70 ? 10 : 9}px">${p.elo}</span>`;
+    div.onclick = () => selectPlayer(p.id);
+    area.appendChild(div);
+  });
+}
+
+function renderPlayerDetail() {
+  const area = document.getElementById('player-detail-area');
+  if (detailChart) { detailChart.destroy(); detailChart = null; }
+  if (!selectedPlayer) { area.innerHTML = ''; return; }
+  const p = state.players.find(pl => pl.id === selectedPlayer);
+  if (!p) { area.innerHTML = ''; return; }
+  const s = playerStats(p.id), tier = winTier(s.wins);
+  const last10 = state.matches.filter(m => m.winnerId === p.id || m.loserId === p.id).slice(-10);
+  const dots = last10.map(m => `<span class="win-dot ${m.winnerId === p.id ? 'dot-w' : 'dot-l'}"></span>`).join('');
+  const rateRank = [...state.players].map(pl => ({ id: pl.id, r: playerStats(pl.id).rate })).sort((a, b) => b.r - a.r).findIndex(x => x.id === p.id) + 1;
+  const hasGames = s.gamesWon > 0 || s.gamesLost > 0;
+  const cols = hasGames ? 6 : 4;
+  area.innerHTML = `<div class="player-detail" style="border-color:${p.color}55">
+    <div class="player-detail-header">
+      <div class="avatar" style="background:${p.color}22;color:${p.color}">${getInitials(p.name)}</div>
+      <div>
+        <div class="player-name-big">${p.name}</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
+          <span class="badge ${tier.cls}">${tier.label}</span>
+          <span style="color:var(--muted);font-size:12px">ELO: <strong style="color:${p.color}">${p.elo}</strong></span>
+          <span style="color:var(--muted);font-size:12px">Ráta rank: <strong style="color:var(--gold)">#${rateRank}/${state.players.length}</strong></span>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:14px">
+      <div style="text-align:center"><div class="metric-label">Meccs</div><div style="font-size:20px;font-weight:700">${s.total}</div></div>
+      <div style="text-align:center"><div class="metric-label">Győzelem</div><div style="font-size:20px;font-weight:700;color:var(--accent)">${s.wins}</div></div>
+      <div style="text-align:center"><div class="metric-label">Vereség</div><div style="font-size:20px;font-weight:700;color:var(--accent3)">${s.losses}</div></div>
+      <div style="text-align:center"><div class="metric-label">Győz. %</div><div style="font-size:20px;font-weight:700;color:var(--accent2)">${s.rate}%</div></div>
+      ${hasGames ? `<div style="text-align:center"><div class="metric-label">Gamek</div><div style="font-size:20px;font-weight:700"><span style="color:var(--accent)">${s.gamesWon}</span>/<span style="color:var(--accent3)">${s.gamesLost}</span></div></div>
+      <div style="text-align:center"><div class="metric-label">Pontok</div><div style="font-size:20px;font-weight:700"><span style="color:var(--accent)">${s.ptsW}</span>/<span style="color:var(--accent3)">${s.ptsL}</span></div></div>` : ''}
+    </div>
+    <div class="section-title">Utolsó 10 meccs formája</div>
+    <div style="display:flex;gap:4px;align-items:center;margin-bottom:14px;flex-wrap:wrap">${dots}<span style="color:var(--muted);font-size:11px;margin-left:8px">${last10.filter(m=>m.winnerId===p.id).length}W / ${last10.filter(m=>m.loserId===p.id).length}L</span></div>
+    <div class="wins-chart-wrap"><canvas id="detail-chart" role="img" aria-label="ELO alakulás az utolsó mérkőzéseken">ELO előzmény</canvas></div>
+  </div>`;
+
+  const playerMatches = state.matches.filter(m => m.winnerId === p.id || m.loserId === p.id).slice(-10);
+  let eloArr = []; let elo = 1200;
+  for (const m of state.matches) {
+    if (m.winnerId === p.id) elo += m.wEloChange;
+    else if (m.loserId === p.id) elo += m.lEloChange;
+    if (playerMatches.includes(m)) eloArr.push(Math.round(elo));
+  }
+  const firstElo = eloArr.length ? eloArr[0] - (playerMatches[0] ? (playerMatches[0].winnerId === p.id ? playerMatches[0].wEloChange : playerMatches[0].lEloChange) : 0) : 1200;
+  const chartData = [Math.round(firstElo), ...eloArr];
+  const labels = ['Kezdő', ...playerMatches.map((m, i) => `#${i + 1} ${m.winnerId === p.id ? 'W' : 'L'}`)];
+  const ptColors = [p.color, ...playerMatches.map(m => m.winnerId === p.id ? '#00e5a0' : '#ff6b6b')];
+  detailChart = new Chart(document.getElementById('detail-chart'), {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'ELO', data: chartData, borderColor: p.color, backgroundColor: p.color + '22', pointBackgroundColor: ptColors, pointRadius: 5, tension: 0.35, fill: true }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8892a4', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#8892a4', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } } } }
+  });
+}
+
+function renderEloTable() {
+  const sorted = [...state.players].sort((a, b) => b.elo - a.elo);
+  document.querySelector('#elo-rank-table tbody').innerHTML = sorted.map((p, i) => {
+    const s = playerStats(p.id), tier = winTier(s.wins);
+    return `<tr class="${selectedPlayer===p.id?'selected-row':''}" onclick="selectPlayer(${p.id})">
+      <td style="color:var(--muted);font-weight:700">${i+1}</td>
+      <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;vertical-align:middle"></span>${p.name}</td>
+      <td style="font-weight:700;color:${p.color}">${p.elo}</td>
+      <td><span class="badge ${tier.cls}">${tier.label}</span></td>
+      <td><span style="color:var(--accent)">${s.wins}</span>/<span style="color:var(--accent3)">${s.losses}</span></td></tr>`;
+  }).join('');
+}
+
+function renderActivityTable() {
+  const rateRanks = [...state.players].map(pl => ({ id: pl.id, r: playerStats(pl.id).rate })).sort((a, b) => b.r - a.r);
+  const data = state.players.map(p => ({ p, s: playerStats(p.id) })).sort((a, b) => b.s.wins - a.s.wins || b.s.rate - a.s.rate);
+  document.querySelector('#activity-rank-table tbody').innerHTML = data.map((d, i) => {
+    const rr = rateRanks.findIndex(x => x.id === d.p.id) + 1;
+    return `<tr class="${selectedPlayer===d.p.id?'selected-row':''}" onclick="selectPlayer(${d.p.id})">
+      <td style="color:var(--muted);font-weight:700">${i+1}</td>
+      <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${d.p.color};margin-right:6px;vertical-align:middle"></span>${d.p.name}</td>
+      <td>${d.s.total}</td>
+      <td style="color:var(--accent);font-weight:700">${d.s.wins}</td>
+      <td><span style="color:var(--accent2)">${d.s.rate}%</span> <span style="color:var(--muted);font-size:10px">(#${rr})</span></td></tr>`;
+  }).join('');
+}
+
+function renderPlayerList() {
+  const list = document.getElementById('player-list');
+  if (!state.players.length) { list.innerHTML = '<div style="color:var(--muted);padding:12px 0;font-size:12px">Nincs regisztrált játékos</div>'; return; }
+  list.innerHTML = state.players.map(p => {
+    const s = playerStats(p.id);
+    return `<div class="history-item">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color};margin-right:8px;vertical-align:middle"></span><strong>${p.name}</strong></span>
+      <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--muted);font-size:11px">${s.total} meccs</span>
+        <span style="color:var(--accent);font-size:11px">${s.wins}W</span>
+        <span style="color:var(--accent3);font-size:11px">${s.losses}L</span>
+        ${isAdmin ? `<button class="btn-danger btn-danger-player" onclick="removePlayer(${p.id})">Törlés</button>` : ''}
+      </span></div>`;
+  }).join('');
+}
+
+function renderMatchSelects() {
+  const opts = state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  const mw = document.getElementById('match-winner');
+  const ml = document.getElementById('match-loser');
+  if (!mw || !ml) return;
+  mw.innerHTML = opts; ml.innerHTML = opts;
+  if (state.players.length > 1) ml.selectedIndex = 1;
+  const md = document.getElementById('match-date');
+  if (md) md.value = new Date().toISOString().split('T')[0];
+  updateScoreHeader();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  const matches = [...state.matches].reverse().slice(0, 100);
+  if (!matches.length) { list.innerHTML = '<div style="color:var(--muted);padding:12px 0;font-size:12px">Nincs rögzített mérkőzés</div>'; return; }
+  list.innerHTML = matches.map(m => {
+    const w = state.players.find(p => p.id === m.winnerId);
+    const l = state.players.find(p => p.id === m.loserId);
+    if (!w || !l) return '';
+    const scoreHtml = formatScore(m);
+    const gameSum = m.wGames !== null ? `<span style="color:var(--muted);font-size:10px">${m.wGames}–${m.lGames} game</span>` : '';
+    return `<div class="history-item">
+      <span style="color:var(--muted);font-size:11px;min-width:82px">${m.date}</span>
+      <span style="flex:1;min-width:140px"><strong style="color:${w.color}">${w.name}</strong> <span style="color:var(--muted)">vs</span> <span style="color:var(--accent3)">${l.name}</span></span>
+      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${scoreHtml} ${gameSum}</span>
+      <span style="display:flex;gap:4px;white-space:nowrap"><span class="elo-badge elo-up">+${m.wEloChange}</span> <span class="elo-badge elo-down">${m.lEloChange}</span></span>
+    </div>`;
+  }).join('');
+}
+
+function renderExport() {
+  const area = document.getElementById('export-area');
+  if (area) area.value = JSON.stringify(state, null, 2);
+}
+
+function render() {
+  renderSummary(); renderBubbles(); renderPlayerDetail();
+  renderEloTable(); renderActivityTable(); renderPlayerList();
+  renderMatchSelects(); renderHistory(); renderExport();
+}
+
+// ===================== IMPORT / EXPORT =====================
+function exportData() {
+  const txt = JSON.stringify(state, null, 2);
+  navigator.clipboard.writeText(txt).then(() => {
+    alert('✓ Adat kimásolva a vágólapra!');
+  }).catch(() => { alert('Másolás sikertelen — jelöld ki és másold kézzel.'); });
+}
+function downloadData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'squash_liga_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+}
+function importData() {
+  if (!isAdmin) return;
+  const raw = document.getElementById('import-area').value.trim();
+  const msg = document.getElementById('import-msg');
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed.players || !parsed.matches) throw new Error('Hiányzó mezők');
+    state = parsed;
+    save(); render();
+    msg.className = 'msg-ok'; msg.textContent = '✓ Importálás sikeres!';
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  } catch(e) {
+    msg.className = 'msg-err'; msg.textContent = 'Hiba: érvénytelen JSON formátum';
+  }
+}
+function clearAll() {
+  if (!isAdmin) return;
+  if (!confirm('BIZTOSAN törölsz mindent? Ez nem visszavonható!')) return;
+  state = { players: [], matches: [] };
+  save(); render(); alert('Minden adat törölve.');
+}
+
+// ===================== TAB SWITCHING =====================
+function switchTab(name) {
+  const tabs = ['dashboard', 'players', 'matches', 'history', 'settings'];
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', tabs[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'matches') { initGames(); renderMatchSelects(); }
+  if (name === 'settings') renderExport();
+}
+
+// ===================== INIT =====================
+if (!loadState()) {
+  // Demo adatok
+  state = { players: ['Kovács Péter','Nagy Zoltán','Szabó Béla','Kiss Anna','Varga Dóra'].map((n,i) => ({id:i+1,name:n,elo:1200,color:COLORS[i]})), matches: [] };
+  const dm=[{w:1,l:2,g:[[11,7],[11,9],[8,11],[11,5]]},{w:3,l:1,g:[[11,8],[9,11],[11,7],[7,11],[11,9]]},{w:2,l:4,g:[[11,6],[11,8],[11,4]]},{w:1,l:5,g:[[11,9],[11,7],[11,3]]},{w:4,l:3,g:[[11,9],[8,11],[11,6],[11,8]]},{w:2,l:5,g:[[11,7],[11,4],[11,9]]},{w:1,l:3,g:[[11,8],[11,6],[11,9]]},{w:4,l:2,g:[[11,9],[11,7],[8,11],[11,6]]},{w:5,l:3,g:[[11,8],[11,9],[11,5]]},{w:1,l:4,g:[[11,9],[7,11],[11,8],[11,6]]},{w:2,l:3,g:[[11,7],[11,5],[11,8]]},{w:5,l:1,g:[[11,9],[8,11],[11,7],[11,8]]},{w:3,l:4,g:[[11,6],[11,9],[11,7]]},{w:1,l:2,g:[[11,8],[11,6],[11,9]]},{w:4,l:5,g:[[11,9],[11,7],[11,5]]},{w:3,l:2,g:[[11,8],[9,11],[11,7],[11,6]]},{w:1,l:4,g:[[11,9],[11,7],[11,8]]},{w:2,l:5,g:[[11,6],[11,8],[11,7]]},{w:5,l:4,g:[[11,9],[11,8],[11,6]]},{w:3,l:1,g:[[11,9],[11,7],[8,11],[11,6]]}];
+  const today = new Date();
+  dm.forEach((m,i) => { const d=new Date(today); d.setDate(d.getDate()-(20-i)*3); addMatchRaw(m.w,m.l,d.toISOString().split('T')[0],m.g); });
+}
+updateAdminUI();
+render();
+</script>
+</body>
+</html>
