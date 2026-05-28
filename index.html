@@ -189,12 +189,12 @@ select.form-input option { background: #1c2030; }
         <div class="section-title">Mérkőzés rögzítése</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div>
-            <div class="metric-label" style="margin-bottom:4px">Győztes</div>
-            <select class="form-input" id="match-winner" onchange="updateScoreHeader()"></select>
+            <div class="metric-label" style="margin-bottom:4px">Játékos 1</div>
+            <select class="form-input" id="match-p1" onchange="updateScoreHeader()"></select>
           </div>
           <div>
-            <div class="metric-label" style="margin-bottom:4px">Vesztes</div>
-            <select class="form-input" id="match-loser" onchange="updateScoreHeader()"></select>
+            <div class="metric-label" style="margin-bottom:4px">Játékos 2</div>
+            <select class="form-input" id="match-p2" onchange="updateScoreHeader()"></select>
           </div>
         </div>
         <div style="margin-top:8px">
@@ -202,20 +202,21 @@ select.form-input option { background: #1c2030; }
           <input type="date" class="form-input" id="match-date" />
         </div>
         <div class="score-entry">
-          <div class="score-entry-title">Végeredmény — Gamek pontszámai</div>
+          <div class="score-entry-title">Végeredmény — Gamek pontszámai (a győztes automatikusan az eredményből derül ki)</div>
           <div style="display:grid;grid-template-columns:28px 1fr 18px 1fr 28px;gap:6px;margin-bottom:8px">
             <span class="game-label" style="font-size:9px">GAME</span>
-            <span class="game-label" id="header-winner" style="color:var(--accent);font-size:10px;text-align:center">GYŐZTES</span>
+            <span class="game-label" id="header-p1" style="color:var(--accent2);font-size:10px;text-align:center">JÁTÉKOS 1</span>
             <span></span>
-            <span class="game-label" id="header-loser" style="color:var(--accent3);font-size:10px;text-align:center">VESZTES</span>
+            <span class="game-label" id="header-p2" style="color:var(--accent2);font-size:10px;text-align:center">JÁTÉKOS 2</span>
             <span></span>
           </div>
           <div id="games-container"></div>
           <button class="add-game-btn" onclick="addGame()">+ Game hozzáadása</button>
           <div class="score-preview">
             <span style="font-size:11px;color:var(--muted)">Gamek száma: <strong id="games-count" style="color:var(--text)">0</strong></span>
-            <span class="score-badge"><span id="preview-w" style="color:var(--accent)">0</span> – <span id="preview-l" style="color:var(--accent3)">0</span></span>
+            <span class="score-badge"><span id="preview-w" style="color:var(--accent)">—</span></span>
           </div>
+          <div id="winner-preview" style="margin-top:8px;font-size:12px;min-height:18px;text-align:center;font-weight:700"></div>
         </div>
         <button class="btn-primary full" onclick="recordMatch()">Mérkőzés rögzítése</button>
         <div id="match-msg" style="margin-top:8px;font-size:12px;color:var(--accent)"></div>
@@ -444,26 +445,55 @@ function renderGames() {
     </div>`).join('');
   updateScorePreview();
 }
+function determineWinner() {
+  // Returns { p1games, p2games } — whoever has more game wins is the winner
+  let p1g = 0, p2g = 0;
+  games.forEach(g => {
+    const v1 = parseInt(g.w) || 0, v2 = parseInt(g.l) || 0;
+    if (v1 > v2) p1g++;
+    else if (v2 > v1) p2g++;
+  });
+  return { p1games: p1g, p2games: p2g };
+}
 function updateScorePreview() {
-  let wg = 0, lg = 0;
-  games.forEach(g => { const wv = parseInt(g.w) || 0, lv = parseInt(g.l) || 0; if (wv > lv) wg++; else if (lv > wv) lg++; });
   const gc = document.getElementById('games-count');
   const pw = document.getElementById('preview-w');
-  const pl = document.getElementById('preview-l');
+  const wp = document.getElementById('winner-preview');
   if (gc) gc.textContent = games.length;
-  if (pw) pw.textContent = wg;
-  if (pl) pl.textContent = lg;
+  const { p1games, p2games } = determineWinner();
+  const p1Sel = document.getElementById('match-p1');
+  const p2Sel = document.getElementById('match-p2');
+  const p1 = p1Sel ? state.players.find(p => p.id === parseInt(p1Sel.value)) : null;
+  const p2 = p2Sel ? state.players.find(p => p.id === parseInt(p2Sel.value)) : null;
+  if (pw) pw.textContent = `${p1games} – ${p2games}`;
+  if (wp) {
+    const hasScores = games.some(g => g.w !== '' || g.l !== '');
+    if (!hasScores) { wp.textContent = ''; wp.style.color = 'var(--muted)'; return; }
+    if (p1games > p2games && p1) {
+      wp.textContent = `🏆 Győztes: ${p1.name}`;
+      wp.style.color = 'var(--accent)';
+    } else if (p2games > p1games && p2) {
+      wp.textContent = `🏆 Győztes: ${p2.name}`;
+      wp.style.color = 'var(--accent)';
+    } else if (p1games === p2games && p1games > 0) {
+      wp.textContent = '⚠️ Döntetlen — adj meg több game-et!';
+      wp.style.color = 'var(--gold)';
+    } else {
+      wp.textContent = '';
+    }
+  }
 }
 function updateScoreHeader() {
-  const wSel = document.getElementById('match-winner');
-  const lSel = document.getElementById('match-loser');
-  if (!wSel || !lSel) return;
-  const w = state.players.find(p => p.id === parseInt(wSel.value));
-  const l = state.players.find(p => p.id === parseInt(lSel.value));
-  const hw = document.getElementById('header-winner');
-  const hl = document.getElementById('header-loser');
-  if (hw && w) hw.textContent = w.name.split(' ')[0].toUpperCase();
-  if (hl && l) hl.textContent = l.name.split(' ')[0].toUpperCase();
+  const p1Sel = document.getElementById('match-p1');
+  const p2Sel = document.getElementById('match-p2');
+  if (!p1Sel || !p2Sel) return;
+  const p1 = state.players.find(p => p.id === parseInt(p1Sel.value));
+  const p2 = state.players.find(p => p.id === parseInt(p2Sel.value));
+  const h1 = document.getElementById('header-p1');
+  const h2 = document.getElementById('header-p2');
+  if (h1 && p1) h1.textContent = p1.name.split(' ')[0].toUpperCase();
+  if (h2 && p2) h2.textContent = p2.name.split(' ')[0].toUpperCase();
+  updateScorePreview();
 }
 function getGameScores() {
   const filled = games.filter(g => g.w !== '' && g.l !== '');
@@ -473,19 +503,29 @@ function getGameScores() {
 
 function recordMatch() {
   if (!isAdmin) return;
-  const wId = parseInt(document.getElementById('match-winner').value);
-  const lId = parseInt(document.getElementById('match-loser').value);
+  const p1Id = parseInt(document.getElementById('match-p1').value);
+  const p2Id = parseInt(document.getElementById('match-p2').value);
   const date = document.getElementById('match-date').value || new Date().toISOString().split('T')[0];
   const msg = document.getElementById('match-msg');
-  if (wId === lId) { msg.textContent = 'A győztes és vesztes nem lehet azonos!'; msg.className='msg-err'; return; }
+  if (p1Id === p2Id) { msg.textContent = 'A két játékos nem lehet azonos!'; msg.className = 'msg-err'; return; }
   const gameScores = getGameScores();
-  const winner = state.players.find(p => p.id === wId);
-  const loser = state.players.find(p => p.id === lId);
-  addMatchRaw(wId, lId, date, gameScores);
-  const gs = gameScores ? gameScores.filter(g => g[0] > g[1]).length + '–' + gameScores.filter(g => g[1] > g[0]).length : '';
+  if (!gameScores) { msg.textContent = 'Adj meg legalább egy game eredményt!'; msg.className = 'msg-err'; return; }
+  const { p1games, p2games } = determineWinner();
+  if (p1games === p2games) { msg.textContent = 'Döntetlen — a győztest nem lehet meghatározni!'; msg.className = 'msg-err'; return; }
+  const winnerId = p1games > p2games ? p1Id : p2Id;
+  const loserId = p1games > p2games ? p2Id : p1Id;
+  // Scores are always stored as [winner_pts, loser_pts]
+  const orientedScores = gameScores.map(g => {
+    const p1wins = g[0] > g[1];
+    return p1games > p2games ? [g[0], g[1]] : [g[1], g[0]];
+  });
+  const winner = state.players.find(p => p.id === winnerId);
+  const loser = state.players.find(p => p.id === loserId);
+  addMatchRaw(winnerId, loserId, date, orientedScores);
+  const gs = `${Math.max(p1games, p2games)}–${Math.min(p1games, p2games)}`;
   msg.className = 'msg-ok';
-  msg.textContent = `✓ ${winner.name} nyert ${loser.name} ellen${gs ? ' (' + gs + ')' : ''}`;
-  setTimeout(() => { msg.textContent = ''; }, 3000);
+  msg.textContent = `✓ ${winner.name} nyert ${loser.name} ellen (${gs})`;
+  setTimeout(() => { msg.textContent = ''; }, 4000);
   initGames(); save(); render();
 }
 
@@ -498,7 +538,7 @@ function formatScore(m) {
 // ===================== PLAYER SELECT =====================
 function selectPlayer(pid) {
   selectedPlayer = selectedPlayer === pid ? null : pid;
-  renderBubbles(); renderPlayerDetail(); renderEloTable(); renderActivityTable();
+  renderPlayerDetail(); renderEloTable(); renderActivityTable();
 }
 
 // ===================== RENDER =====================
@@ -513,28 +553,6 @@ function renderSummary() {
     <div class="card"><div class="metric-label">Mérkőzések</div><div class="metric-val" style="color:var(--accent)">${totalMatches}</div><div class="metric-sub">${totalGames} game összesen</div></div>
     <div class="card"><div class="metric-label">ELO Vezető</div><div class="metric-val" style="color:${topPlayer?.color || 'var(--gold)'};font-size:18px">${topPlayer?.name.split(' ')[0] || '—'}</div><div class="metric-sub">${topPlayer?.elo || ''} ELO</div></div>
     <div class="card"><div class="metric-label">Legjobb arány</div><div class="metric-val" style="color:var(--gold);font-size:18px">${bestRate?.p?.name.split(' ')[0] || '—'}</div><div class="metric-sub">${bestRate?.s?.rate || 0}% győzelmi ráta</div></div>`;
-}
-
-function renderBubbles() {
-  const area = document.getElementById('bubble-area');
-  area.innerHTML = '';
-  if (!state.players.length) { area.innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center;font-size:12px">Nincs regisztrált játékos</div>'; return; }
-  const sorted = [...state.players].sort((a, b) => b.elo - a.elo);
-  const maxElo = Math.max(...sorted.map(p => p.elo)), minElo = Math.min(...sorted.map(p => p.elo)), range = maxElo - minElo || 1;
-  const n = sorted.length, cols = Math.min(n, 5), rows = Math.ceil(n / cols);
-  sorted.forEach((p, i) => {
-    const norm = (p.elo - minElo) / range, size = 44 + norm * 56;
-    const col = i % cols, row = Math.floor(i / cols);
-    const cx = 10 + col * (80 / cols) + 40 / cols;
-    const cy = 12 + row * (76 / rows) + 38 / rows;
-    const jx = (Math.sin(i * 137) * 5), jy = (Math.cos(i * 137) * 4);
-    const div = document.createElement('div');
-    div.className = 'bubble' + (selectedPlayer === p.id ? ' selected' : '');
-    div.style.cssText = `left:${Math.max(6,Math.min(92,cx+jx))}%;top:${Math.max(8,Math.min(88,cy+jy))}%;width:${size}px;height:${size}px;background:${p.color}20;border:2px solid ${p.color};color:${p.color};`;
-    div.innerHTML = `<span class="bubble-name" style="font-size:${size > 70 ? 12 : 10}px">${p.name.split(' ')[0]}</span><span class="bubble-elo" style="font-size:${size > 70 ? 10 : 9}px">${p.elo}</span>`;
-    div.onclick = () => selectPlayer(p.id);
-    area.appendChild(div);
-  });
 }
 
 function renderPlayerDetail() {
@@ -642,11 +660,11 @@ function renderPlayerList() {
 
 function renderMatchSelects() {
   const opts = state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-  const mw = document.getElementById('match-winner');
-  const ml = document.getElementById('match-loser');
-  if (!mw || !ml) return;
-  mw.innerHTML = opts; ml.innerHTML = opts;
-  if (state.players.length > 1) ml.selectedIndex = 1;
+  const p1 = document.getElementById('match-p1');
+  const p2 = document.getElementById('match-p2');
+  if (!p1 || !p2) return;
+  p1.innerHTML = opts; p2.innerHTML = opts;
+  if (state.players.length > 1) p2.selectedIndex = 1;
   const md = document.getElementById('match-date');
   if (md) md.value = new Date().toISOString().split('T')[0];
   updateScoreHeader();
@@ -677,7 +695,7 @@ function renderExport() {
 }
 
 function render() {
-  renderSummary(); renderBubbles(); renderPlayerDetail();
+  renderSummary(); renderPlayerDetail();
   renderEloTable(); renderActivityTable(); renderPlayerList();
   renderMatchSelects(); renderHistory(); renderExport();
 }
